@@ -1,4 +1,5 @@
 import { charger } from './store.js';
+import { demarrerSync, surSync } from './sync.js';
 import { h, icon } from './ui/dom.js';
 import * as accueil from './ui/accueil.js';
 import * as generer from './ui/generer.js';
@@ -63,6 +64,9 @@ window.addEventListener('hashchange', render);
 (async () => {
   try { await charger(); } catch (e) { console.error('Chargement', e); }
   render();
+  // Quand la synchro rapporte des données d'un autre appareil, on rafraîchit les écrans de consultation.
+  surSync((change) => { if (change && ['accueil', 'journal', 'bilan', 'historique', 'bibliotheque'].includes(parseHash().route)) render(); });
+  demarrerSync();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('SW', e));
   }

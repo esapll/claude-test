@@ -4,15 +4,22 @@ import donnees from './data/donnees-initiales.js';
 import { BIBLIOTHEQUE, exercicePerso } from './data/bibliotheque.js';
 import { objectifKey } from './engine/stats.js';
 import { scoresTest } from './engine/scoring.js';
+import { fusionner, CLES_SYNC } from './engine/fusion.js';
 
 const DB = 'coach-mobilite', STORE = 'kv', VERSION = 1;
-const CLES = ['journal', 'tests', 'gowod', 'exercicesPerso', 'reglages', 'meta', 'presets', 'derniereSeance'];
+const CLES = ['journal', 'tests', 'gowod', 'exercicesPerso', 'reglages', 'meta', 'presets', 'derniereSeance', 'supprimes', 'sync'];
 
 export const state = {
   journal: [], tests: [], gowod: [], exercicesPerso: [],
   reglages: { seancesParSemaine: 3, minutesParMois: 120, bips: true, volume: 0.5 },
   meta: {}, presets: [], derniereSeance: null,
+  supprimes: {}, // pierres tombales { id: horodatage } pour propager les suppressions
+  sync: {},      // { token, gistId, derniere, etat, erreur } : propre à l'appareil, jamais exporté
 };
+
+const ecouteurs = new Set();
+/** Appelé après chaque modification de données synchronisées. */
+export function surModification(fn) { ecouteurs.add(fn); }
 
 let dbp = null;
 function openDb() {
@@ -53,7 +60,14 @@ async function lire(key) {
   return undefined;
 }
 
-export async function sauver(...keys) {
+export async function sauver(...args) {
+  const opts = typeof args[args.length - 1] === 'object' ? args.pop() : {};
+  const keys = args;
+  const now = Date.now();
+  if (!opts.silencieux) {
+    if (keys.includes('reglages')) state.reglages.maj = now;
+    for (const k of ['journal', 'tests', 'exercicesPerso']) if (keys.includes(k)) for (const x of state[k]) if (x.maj == null && x.source !== 'import') x.maj = now;
+  }
   for (const key of keys) {
     const val = JSON.parse(JSON.stringify(state[key]));
     let ok = false;
@@ -62,6 +76,7 @@ export async function sauver(...keys) {
     try { localStorage.setItem(DB + ':' + key, JSON.stringify(val)); ok = true; } catch (e) { if (!ok) console.warn('localStorage écriture', key, e); }
     if (!ok) throw new Error('Enregistrement impossible');
   }
+  if (!opts.silencieux && keys.some((k) => CLES_SYNC.includes(k))) ecouteurs.forEach((fn) => { try { fn(keys); } catch (e) { console.warn(e); } });
 }
 
 export function importInitial() {
@@ -104,11 +119,12 @@ export async function ajouterEntree(e) {
 }
 export async function modifierEntree(id, patch) {
   const i = state.journal.findIndex((e) => e.id === id);
-  if (i >= 0) { state.journal[i] = { ...state.journal[i], ...patch }; await sauver('journal'); }
+  if (i >= 0) { state.journal[i] = { ...state.journal[i], ...patch, maj: Date.now() }; await sauver('journal'); }
 }
 export async function supprimerEntree(id) {
   state.journal = state.journal.filter((e) => e.id !== id);
-  await sauver('journal');
+  state.supprimes[id] = Date.now();
+  await sauver('journal', 'supprimes');
 }
 
 // ---------- Export / import ----------
@@ -116,18 +132,24 @@ export function exporter() {
   return {
     app: 'coach-mobilite', version: 1, exporteLe: new Date().toISOString(),
     journal: state.journal, tests: state.tests, gowod: state.gowod,
-    exercicesPerso: state.exercicesPerso, reglages: state.reglages, presets: state.presets,
+    exercicesPerso: state.exercicesPerso, reglages: state.reglages, presets: state.presets, supprimes: state.supprimes,
   };
 }
+/** Import d'un fichier JSON : fusion avec les données présentes (rien n'est perdu). */
 export async function importer(obj) {
   if (!obj || obj.app !== 'coach-mobilite' || !Array.isArray(obj.journal)) throw new Error('Fichier non reconnu');
-  for (const k of ['journal', 'tests', 'gowod', 'exercicesPerso', 'presets']) if (Array.isArray(obj[k])) state[k] = obj[k];
-  if (obj.reglages) state.reglages = { ...state.reglages, ...obj.reglages };
+  const fus = fusionner(Object.fromEntries(CLES_SYNC.map((k) => [k, state[k]])), obj);
+  for (const k of CLES_SYNC) state[k] = fus[k];
+  if (Array.isArray(obj.presets) && !state.presets.length) state.presets = obj.presets;
   state.meta.importe = true;
-  await sauver('journal', 'tests', 'gowod', 'exercicesPerso', 'presets', 'reglages', 'meta');
+  await sauver(...CLES_SYNC, 'presets', 'meta');
 }
+
+/** Revient aux données initiales, sur tous les appareils synchronisés. */
 export async function reinitialiser() {
+  const now = Date.now();
+  for (const k of ['journal', 'tests', 'exercicesPerso']) for (const x of state[k]) if (x.source !== 'import') state.supprimes[x.id] = now;
   state.tests = []; state.exercicesPerso = []; state.presets = []; state.derniereSeance = null;
   importInitial();
-  await sauver('journal', 'tests', 'gowod', 'exercicesPerso', 'presets', 'derniereSeance', 'meta');
+  await sauver('journal', 'tests', 'gowod', 'exercicesPerso', 'presets', 'derniereSeance', 'meta', 'supprimes');
 }

@@ -6,7 +6,17 @@ Application web mobile (PWA) qui sert de coach de mobilité personnel. Elle fonc
 
 1. Ouvrir l'URL de l'application dans **Safari**.
 2. Toucher **Partager**, puis **Sur l'écran d'accueil**.
-3. Lancer l'application depuis l'icône : elle marche hors ligne et les données restent sur l'appareil (IndexedDB). Pour les sauvegarder, utiliser **Réglages → Exporter en JSON**.
+3. Lancer l'application depuis l'icône : elle marche hors ligne et les données sont enregistrées sur l'appareil (IndexedDB).
+
+### Synchroniser iPhone et iPad
+
+Les données passent par un **Gist privé** de ton compte GitHub, sans serveur à gérer :
+
+1. Crée un jeton sur https://github.com/settings/tokens/new?scopes=gist (seule la case **gist** cochée).
+2. Dans **Réglages → Synchronisation**, colle le jeton puis touche **Connecter**.
+3. Fais la même chose sur l'autre appareil, avec le même jeton.
+
+La synchro se déclenche au démarrage, au retour dans l'appli, au retour du réseau et quelques secondes après chaque modification. Les deux copies sont **fusionnées** : union par identifiant, la version la plus récente l'emporte, et une suppression se propage aux autres appareils. Une séance faite hors ligne est envoyée dès que le réseau revient. Le jeton reste sur l'appareil et n'est jamais exporté. L'export/import JSON reste disponible, et l'import fusionne au lieu de remplacer.
 
 ### Hébergement (GitHub Pages)
 
@@ -37,6 +47,8 @@ src/engine/                               logique pure, testée sous Node
   scoring.js                              scores du test, asymétries, priorités
   dates.js
 src/store.js                              IndexedDB (repli localStorage), import initial, export/import JSON
+src/sync.js                               synchronisation via Gist GitHub privé
+src/engine/fusion.js                      fusion de deux copies des données (testée)
 src/ui/                                   écrans : accueil, generer, minuteur, journal, test,
                                           bibliotheque, bilan, historique, reglages
 tests/engine.test.mjs
@@ -46,10 +58,12 @@ tests/engine.test.mjs
 
 | Clé (IndexedDB) | Contenu |
 |---|---|
-| `journal` | `{ id, date: 'AAAA-MM-JJ', objectif: relax\|mob\|post\|course\|velo, duree (min), contenu, ressenti, exercices?: [{ id, sec }], source: import\|app }` |
+| `journal` | `{ id, date: 'AAAA-MM-JJ', objectif: relax\|mob\|post\|course\|velo, duree (min), contenu, ressenti, exercices?: [{ id, sec }], source: import\|app, maj (horodatage) }` |
 | `tests` | `{ id, date, notes: { [testId]: { D, G } \| { v } }, zones: { epaules, overhead, thorax, hanches, chaine, chevilles }, global }` |
 | `gowod` | les 2 tests GOWOD (%), conservés tels quels, sans conversion |
 | `exercicesPerso` | exercices ajoutés à la main (mêmes champs que la bibliothèque) |
+| `supprimes` | pierres tombales `{ id: horodatage }` pour propager les suppressions |
+| `sync` | jeton, identifiant du Gist, état : propre à l'appareil, jamais synchronisé ni exporté |
 | `reglages`, `presets`, `derniereSeance`, `meta` | objectifs, raccourcis « séance express », séance lancée, indicateur d'import |
 
 Exercice : `n, z, o, t, s, c, p, k` (champs d'origine) + `materiel` (aucun, rouleau, kettlebell, mur, banc), `cotes`, `actif`, et pour le générateur `flexion`, `rotExt`, `activation`, `cibles`, `role`.

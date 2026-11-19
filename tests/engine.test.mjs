@@ -173,3 +173,19 @@ test('le service worker met en cache tous les fichiers de l\'app', async () => {
     assert.ok(sw.includes(`"${rel}"`), `${rel} absent de sw.js`);
   }
 });
+
+test('fusion entre appareils : union, version la plus récente, suppressions', async () => {
+  const { fusionner } = await import('../src/engine/fusion.js');
+  const base = [{ id: 'imp0', date: '2026-09-20', duree: 9 }];
+  const a = { journal: [...base, { id: 'a1', date: '2026-11-18', duree: 10, maj: 100 }, { id: 'x', date: '2026-11-10', duree: 5, maj: 50 }], supprimes: {}, reglages: { minutesParMois: 150, maj: 300 } };
+  const b = { journal: [...base, { id: 'b1', date: '2026-11-19', duree: 12, maj: 200 }, { id: 'x', date: '2026-11-10', duree: 8, maj: 80 }], supprimes: { imp0: 150 }, reglages: { minutesParMois: 120, maj: 100 } };
+  const f = fusionner(a, b);
+  assert.deepEqual(f.journal.map((e) => e.id), ['x', 'a1', 'b1']);
+  assert.equal(f.journal.find((e) => e.id === 'x').duree, 8);
+  assert.equal(f.reglages.minutesParMois, 150);
+  // une entrée modifiée après sa suppression est conservée
+  const g = fusionner({ journal: [{ id: 'y', date: '2026-11-01', maj: 500 }] }, { journal: [], supprimes: { y: 400 } });
+  assert.equal(g.journal.length, 1);
+  // fusion idempotente
+  assert.deepEqual(fusionner(f, f).journal, f.journal);
+});

@@ -1,6 +1,6 @@
 // Service worker : tout est mis en cache pour un usage 100 % hors ligne.
 // Incrémenter VERSION à chaque modification des fichiers.
-const VERSION = 'coach-mobilite-v1';
+const VERSION = 'coach-mobilite-v2';
 const FICHIERS = [
   "./",
   "index.html",
@@ -17,12 +17,14 @@ const FICHIERS = [
   "src/data/tests.js",
   "src/engine/dates.js",
   "src/engine/durations.js",
+  "src/engine/fusion.js",
   "src/engine/generator.js",
   "src/engine/scoring.js",
   "src/engine/stats.js",
   "src/engine/timeline.js",
   "src/main.js",
   "src/store.js",
+  "src/sync.js",
   "src/ui/accueil.js",
   "src/ui/bibliotheque.js",
   "src/ui/bilan.js",
